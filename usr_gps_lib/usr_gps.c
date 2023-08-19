@@ -2,7 +2,7 @@
  * usr_gps.c
  *
  *  Created on: Aug 2, 2023
- *      Author: numann
+ *      Author: numan
  */
 #include "usr_general.h"
 #define _buffer_size 1024
@@ -60,13 +60,21 @@ _io _U8 dotIndexLong;
 _io _U8 dotIndexLat;
 _io _U8 degreeIndexLat;
 _io _U8 degreeIndexLong;
-_io _U8 comacounter;
+_io _U8 comaCounter;
 
 _io _fl time, latitude, longitude;
 _io _fl arrLat, arrLong;
 
 /******************************************/
-/*****************user*******************/
+/*******************user*******************/
+void UL_GpsL86GetRMCPayyload(void) // *! to be tested
+{
+    GpsGetRmc();
+    if (rmcDataValidFlag)
+    {
+        HAL_UART_Transmit(&huart2,(uint8_t*)gpsPayyload,strlen(gpsPayyload),HAL_MAX_DELAY);
+    }
+}
 void UL_GpsL86GetLocation(void) //? testi geçti
 {
     GpsGetRmc();
@@ -92,8 +100,54 @@ void getLocalTr(void) // *! to be tested
         formatDataLocalTr(time);
     }
 }
+void UL_GpsL86GetGSVData(void)
+{
+    if(GnssRx_Flag)
+    {
+        Msgindex = 0;
+        strcpy(m_gpsTransmitBuf,(char*)(rxData));
+        ptr = strstr(m_gpsTransmitBuf,"GLGSV");
+        if(*ptr == 'G')
+        {
+            while(1)
+            {
+                gpsGSVPayyload[Msgindex]=*ptr;
+                Msgindex++;
+                *ptr=*(ptr+Msgindex);
+                if(*ptr=='\n')
+                {
+                    Msgindex=0;
+                    for(int i=0;i<1024;i++)
+                    {
+                        rxData[i]=0;
+                        m_gpsTransmitBuf[i]=0;
+                    }
+                    if(strlen(gpsGSVPayyload)>43)
+                    {
+                        parseGSV(); // // todo: break
 
-/********************IO*******************/
+                        for(int i=0;i<5;i++)
+                        {
+                            satInWiev[i]=0;
+                            satId[i]=0;
+                            elevation[i]=0;
+                            azimuth[i]=0;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        GnssRx_Flag =false;
+    }
+}
+void UL_GpsL86GetVTGData(void)
+{
+    Msgindex =0; // TODO: DEVAM ET BREAK
+}
+
+/**********************user********************/
+/********************STATICS*******************/
 _io void GpsGetRmc(void) //? testi geçti
 {
     if (GnssRx_Flag)
@@ -171,15 +225,7 @@ _io void formatDataLocalTr(float Time) // *! to be tested
     HAL_UART_Transmit(&huart2, (uint8_t *)dataTime, strlen(dataTime), HAL_MAX_DELAY);
 }
 
-// _io void DataParseProc(void)
-// {
-// }
-
-// _io void formatData(void)
-// {
-// }
-
-_io void formatLocation(float Lat, float Long)
+_io void formatLocation(float Lat, float Long) //? tested
 {
     arrLat = latitude;
     arrLong = longitude;
@@ -219,3 +265,105 @@ _io void formatLocation(float Lat, float Long)
         data2[i] = 0;
     }
 }
+_io void parseGSV(void)             // *! to be tested
+{
+    comaCounter =0;
+    for(int i=0;i<150;i++)
+    {
+        if(gpsGSVPayyload[i]==',')
+            comaCounter ++;
+        
+        switch(comaCounter)
+        {
+            case 3:
+            {
+                if(gpsGSVPayyload[i]==',')
+                    break;
+                satInWiev[c1]=gpsGSVPayyload[i];
+                c1++;
+            break;
+            }
+            case 4:
+            {
+                if(gpsGSVPayyload[i]==',')
+					break;
+				satId[c2] =  gpsGSVPayyload[i];
+				c2++;
+            break;
+            }
+            case 5:
+            {
+                if(gpsGSVPayyload[i]==',')
+					break;
+                elevation[c3]=gpsGSVPayyload[i];
+                c3++;
+            break;
+            }
+            case 6:
+            {
+                if(gpsGSVPayyload[i]==',')
+					break;
+                azimuth[c4]=gpsGSVPayyload[i];
+                c4++;
+            break;
+            }
+            default:
+            {
+            break;
+            }
+        }
+    }
+    c1=0;
+	c2=0;
+	c3=0;
+	c4=0;
+    HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n sat in wiew: ", 16, HAL_MAX_DELAY);
+	HAL_UART_Transmit(&huart2, (uint8_t*)satInWiev, sizeof(satInWiev), HAL_MAX_DELAY);
+	HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n sat id: ", 11, HAL_MAX_DELAY);
+	HAL_UART_Transmit(&huart2, (uint8_t*)satId, sizeof(satId), HAL_MAX_DELAY);
+	HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n elevation: ", 13, HAL_MAX_DELAY);
+	HAL_UART_Transmit(&huart2, (uint8_t*)elevation, sizeof(elevation), HAL_MAX_DELAY);
+	HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n azimuth: ", 11, HAL_MAX_DELAY);
+	HAL_UART_Transmit(&huart2, (uint8_t*)azimuth, sizeof(azimuth), HAL_MAX_DELAY);
+	comaCounter=0;
+
+}
+void parseVTG(void)
+{
+    comaCounter  = 0;
+    for(int i=0; i<150;i++)
+    {
+        if(gpsVTGPayyload[i] == ',')
+            comaCounter ++;
+        switch(comaCounter)
+        {
+            case 1:
+            {
+                courseOG[c1]=gpsVTGPayyload[i];
+                c1++;
+            break;
+            }
+            case 5:
+            {
+                speedOGKnot[c2]=gpsVTGPayyload[i];
+                c2++;
+            break;
+            }
+            case 7:
+            {
+                speedOGKm[c3]=gpsVTGPayyload[i];
+                c3++;
+            break;
+            }
+        }
+    }
+    c1=0;c2=0;c3=0;
+	HAL_UART_Transmit(&huart2, (uint8_t *)"\n course Over Ground: ", 22, HAL_MAX_DELAY);
+	HAL_UART_Transmit(&huart2, (uint8_t*)courseOG, sizeof(courseOG), HAL_MAX_DELAY);
+	HAL_UART_Transmit(&huart2, (uint8_t *)"\n Speed Over Ground(knot): ", 26, HAL_MAX_DELAY);
+	HAL_UART_Transmit(&huart2, (uint8_t*)speedOGKnot, sizeof(speedOGKnot), HAL_MAX_DELAY);
+	HAL_UART_Transmit(&huart2, (uint8_t *)"\n Speed Over Ground(KM/H): ", 27, HAL_MAX_DELAY);
+	HAL_UART_Transmit(&huart2, (uint8_t*)speedOGKm, sizeof(speedOGKm), HAL_MAX_DELAY);
+	comaCounter = 0;
+}
+/********************STATICS*******************/
