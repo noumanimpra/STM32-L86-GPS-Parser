@@ -2,7 +2,7 @@
  * usr_gps.c
  *
  *  Created on: Aug 2, 2023
- *      Author: numan
+ *      Author: numann
  */
 #include "usr_general.h"
 #define _buffer_size 1024
